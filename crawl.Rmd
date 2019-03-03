@@ -1,0 +1,185 @@
+---
+title: "crawl_roving_inspection"
+author: "Zeren Li"
+date: "2018/12/18"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+## R Markdown
+
+```{r load package}
+
+library(purrr)
+library(rvest)
+library(stringr)
+library(plyr)
+library(dplyr)
+library(tidyr)
+library(knitr)
+```
+
+```{r ccdi}
+##set baseurl
+base_url <- "http://www.ccdi.gov.cn/xsxc/index_"
+
+
+##create  index list
+html <- paste0(base_url, "1", ".html", sep = "")
+# crawl
+urllist <- list()
+
+for (i in 1:142) {
+  Sys.sleep(1)
+  html <- paste0(base_url, i , ".html", sep = "")
+  urllist[[i]] = html  %>%
+  read_html()  %>%
+  html_nodes(".list_news_dl a")  %>%
+  html_attr("href") %>%
+  map(., function(x) str_replace(x, ".", "http://www.ccdi.gov.cn/xsxc"))  %>%
+  as.vector()
+}
+
+lists <- unlist(urllist)   
+
+save(lists, file = "./urllist.RData")
+
+
+load("./urllist.RData")
+dir.create("html/", showWarnings = FALSE, recursive = TRUE)
+
+newlist <- lists[868:993]
+for(newlist in newlist){
+  Sys.sleep(1)
+  name = str_replace_all(newlist, "http://www.ccdi.gov.cn/xsxc|/|_", "")
+  cat(newlist,'\n')
+  download.file(
+    url = newlist,
+    method='auto',
+    destfile = paste0("html/",  name),
+    quiet = TRUE
+    )
+}
+
+
+  
+files=dir("html/",full.names=TRUE)
+
+
+##get the address
+ccdi_title = map(files, function(x) {
+      read_html(x)  %>%
+  html_nodes(".tit")  %>%
+  html_text() %>%
+  map_chr(., function(x) str_replace_all(x, "\r|\n|\t| ", "")) 
+})   %>%
+       map(., data.frame) %>%
+       map_df(., rbind) 
+
+date = map(files, function(x) {
+      read_html(x)  %>%
+  html_nodes(".e2")  %>%
+  html_text() %>%
+  map_chr(., function(x) str_replace_all(x, "\r|\n|\t| |发布时间|：", "")) 
+})   %>%
+       map(., data.frame) %>%
+       map_df(., rbind) 
+
+text = map(files, function(x) {
+      read_html(x)  %>%
+  html_nodes(".content")  %>%
+  html_text() %>%
+  map_chr(., function(x) str_replace_all(x, "\r|\n|\t| |", "") %>% str_sub(.,546)) 
+})   %>%
+       map(., data.frame) %>%
+       map_df(., rbind) 
+
+# merge three columns
+ccdi_inspection <- cbind(ccdi_title, date, text)
+
+names(ccdi_inspection) <- c("title","date","text")
+
+ccdi_inspection <- ccdi_inspection %>%
+  mutate(location = str_sub(title,1,4) %>% str_remove(.,"："),
+         team = "",
+         year	= "",
+         start_month	= "",
+         end_month = "",
+         team = "")
+library(readr)
+write_excel_csv(ccdi_inspection,  "./ccdi_inspection.csv")
+
+save(ccdi_inspection,  "./ccdi_inspection.RData")
+
+```
+
+```{r henan}
+base_url <- "http://www.hnsjct.gov.cn/sitesources/hnsjct/page_pc/gzdt/xsgz/list"
+
+urllist <- list()
+
+for (i in 1:99) {
+  Sys.sleep(1)
+  html <- paste0(base_url, i , ".html", sep = "")
+  urllist[[i]] = html  %>%
+  read_html()  %>%
+  html_nodes("#articleListTable a")  %>%
+  html_attr("href") %>%
+  as.vector()
+}
+# get the url list
+henan <-   map(urllist, function(x) str_replace(x, ".", "http://www.hnsjct.gov.cn/"))  %>%
+   unlist() %>% as.list()
+
+save(henan, file = "./urllist_henan.RData")
+
+dir.create("html/henan", showWarnings = FALSE, recursive = TRUE)
+
+for(newlist in henan[[1]]){
+  Sys.sleep(1)
+  name = str_replace_all(newlist, "http://www.hnsjct.gov.cn/", "")
+  cat(newlist,'\n')
+  download.file(
+    url = newlist,
+    method='auto',
+    destfile = paste0("html/",  name),
+    quiet = TRUE
+    )
+}
+
+for(newlist in miss_henan[1:344]){
+  Sys.sleep(1.5)
+  cat(newlist,'\n')
+  name = str_sub(newlist,-35,-1)
+  download.file(
+    url = newlist,
+    method='auto',
+    destfile = paste0("./html/henan/",  name ),
+    quiet = TRUE
+    )
+}
+
+
+
+files=dir("html/henan",full.names=TRUE) %>% as.list()
+
+Sys.setlocale("LC_ALL", "en_US.UTF-8")
+.article-tit
+##get functrion
+node_extr = function(nodename, variable){
+variable = map(files[1:2], function(x) {
+      read_html(x,encoding = "UTF-8")  %>%
+  html_nodes(nodename)  %>%
+  html_text() %>%
+  map_chr(., function(x) str_replace_all(x, "\r|\n|\t| ", "")) 
+})   %>%
+       map(., data.frame) %>%
+       map_df(., rbind)  
+#rename variable
+names(variable) <- as.character(variable)
+}
+
+
+node_extr(".article-tit", title)
